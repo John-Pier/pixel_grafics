@@ -1,4 +1,5 @@
 //Main class
+//@ts-check
 'use strict';
 const scale = 10; //разрешение 1 пикселя
 const around = [{
@@ -20,19 +21,37 @@ const around = [{
 ];
 
 class Picture {
+    /**
+     * 
+     * @param {number} width 
+     * @param {number} height 
+     * @param {string[]} pixels 
+     */
     constructor(width, height, pixels) {
         this.width = width;
         this.height = height;
         this.pixels = pixels;
     }
 
+    /**
+     * @param {number} width
+     * @param {number} height
+     * @param {string} color
+     */
     static empty(width, height, color) {
-        let pixels = new Array(width * height).fill(color);
-        return new Picture(width, height, pixels);
-    }
+            let pixels = new Array(width * height).fill(color);
+            return new Picture(width, height, pixels);
+        }
+        /**
+         * @param {number} x
+         * @param {number} y
+         */
     pixel(x, y) {
-        return this.pixels[x + y * this.width];
-    }
+            return this.pixels[x + y * this.width];
+        }
+        /**
+         * @param {{ x: number, y: number, color: string }[]} pixels
+         */
     draw(pixels) {
         let copy = this.pixels.slice();
         for (let { x, y, color }
@@ -43,10 +62,20 @@ class Picture {
     }
 }
 
+/**
+ * @param {any} state
+ * @param {any} action
+ */
 function updateState(state, action) {
-    return Object.assign({}, state, action); //{...state,  ...action};
+    return {...state, ...action }; //Старый вариант => Object.assign({}, state, action); 
 }
 
+/**
+ * @param {string} type
+ * @param {*} [props]
+ * @param {string[]} children
+ * @returns {HTMLElement}
+ */
 function elt(type, props, ...children) {
     let dom = document.createElement(type);
     if (props) Object.assign(dom, props);
@@ -58,38 +87,71 @@ function elt(type, props, ...children) {
 }
 
 class PictureCanvas {
+    /**
+     * @param {Picture} picture
+     * @param {*} pointerDown
+     */
     constructor(picture, pointerDown) {
-        this.dom = elt("canvas", {
-            onmousedown: event => this.mouse(event, pointerDown),
-            ontouchstart: event => this.touch(event, pointerDown)
-        });
-        this.syncState(picture);
-    }
+            this.dom = elt("canvas",
+                /**
+                 * @param {MouseEvent} event
+                 */
+                /**
+                 * @param {TouchEvent} event
+                 */
+                {
+                    onmousedown: event => this.mouse(event, pointerDown),
+                    ontouchstart: event => this.touch(event, pointerDown)
+                });
+            this.syncState(picture);
+        }
+        /**
+         * @param {Picture} picture
+         */
     syncState(picture) {
         if (this.picture == picture) return;
+        if (!this.picture) {
+            drawPicture(picture, this.dom, scale);
+        } else {
+            drawQuickPicture(picture, this.picture, this.dom, scale);
+        }
         this.picture = picture;
-        drawPicture(this.picture, this.dom, scale);
     }
 }
 
-PictureCanvas.prototype.mouse = function(downEvent, onDown) {
-    if (downEvent.button != 0) return;
-    let pos = pointerPosition(downEvent, this.dom);
-    let onMove = onDown(pos);
-    if (!onMove) return;
-    let move = moveEvent => {
-        if (moveEvent.buttons == 0) {
-            this.dom.removeEventListener("mousemove", move);
-        } else {
-            let newPos = pointerPosition(moveEvent, this.dom);
-            if (newPos.x == pos.x && newPos.y == pos.y) return;
-            pos = newPos;
-            onMove(newPos);
-        }
-    };
-    this.dom.addEventListener("mousemove", move);
-};
 
+
+PictureCanvas.prototype.mouse =
+    /**
+     * @param {MouseEvent} downEvent
+     * @param {any} onDown
+     */
+    function(downEvent, onDown) {
+        if (downEvent.button != 0) return;
+        let pos = pointerPosition(downEvent, this.dom);
+        let onMove = onDown(pos);
+        if (!onMove) return;
+        /**
+         * @param {any} moveEvent
+         */
+        let move = moveEvent => {
+            if (moveEvent.buttons == 0) {
+                this.dom.removeEventListener("mousemove", move);
+            } else {
+                let newPos = pointerPosition(moveEvent, this.dom);
+                if (newPos.x == pos.x && newPos.y == pos.y) return;
+                pos = newPos;
+                onMove(newPos);
+            }
+        };
+        this.dom.addEventListener("mousemove", move);
+    };
+
+/**
+ * @param {Picture} picture
+ * @param {any} canvas
+ * @param {number} scale
+ */
 function drawPicture(picture, canvas, scale) {
     canvas.width = picture.width * scale;
     canvas.height = picture.height * scale;
@@ -102,6 +164,32 @@ function drawPicture(picture, canvas, scale) {
     }
 }
 
+/**
+ * 
+ * @param {Picture} pictureNew 
+ * @param {Picture} pictureOld 
+ * @param {*} canvas 
+ * @param {number} scale 
+ */
+function drawQuickPicture(pictureNew, pictureOld, canvas, scale) {
+    if (pictureNew.height != pictureOld.height || pictureNew.width != pictureOld.width) {
+        drawPicture(pictureNew, canvas, scale);
+        return;
+    }
+    let cx = canvas.getContext("2d");
+    for (let y = 0; y < pictureNew.height; y++) {
+        for (let x = 0; x < pictureNew.width; x++) {
+            if (pictureNew.pixel(x, y) == pictureOld.pixel(x, y)) continue;
+            cx.fillStyle = pictureNew.pixel(x, y);
+            cx.fillRect(x * scale, y * scale, scale, scale);
+        }
+    }
+}
+
+/**
+ * @param {{ clientX: number; clientY: number; }} pos
+ * @param {{ getBoundingClientRect: () => any; }} domNode
+ */
 function pointerPosition(pos, domNode) {
     let rect = domNode.getBoundingClientRect();
     return {
@@ -110,44 +198,77 @@ function pointerPosition(pos, domNode) {
     };
 }
 
-PictureCanvas.prototype.touch = function(startEvent, onDown) {
-    let pos = pointerPosition(startEvent.touches[0], this.dom);
-    let onMove = onDown(pos);
-    startEvent.preventDefault();
-    if (!onMove) return;
-    let move = moveEvent => {
-        let newPos = pointerPosition(moveEvent.touches[0], this.dom);
-        if (newPos.x == pos.x && newPos.y == pos.y) return;
-        pos = newPos;
-        onМove(newPos);
-    };
-    let end = () => {
-        this.dom.removeEventListener("touchmove", move);
-        this.dom.removeEventListener("touchend", end);
-    };
-    this.dom.addEventListener("touchmove", move);
-    this.dom.addEventListener("touchend", end);
-}
+PictureCanvas.prototype.touch =
+    /**
+     * @param {TouchEvent} startEvent
+     * @param {(arg0: { x: number; y: number; }) => any} onDown
+     */
+    function(startEvent, onDown) {
+        let pos = pointerPosition(startEvent.touches[0], this.dom);
+        let onMove = onDown(pos);
+        startEvent.preventDefault();
+        if (!onMove) return;
+        /**
+         * @param {*} moveEvent
+         */
+        let move = moveEvent => {
+            let newPos = pointerPosition(moveEvent.touches[0], this.dom);
+            if (newPos.x == pos.x && newPos.y == pos.y) return;
+            pos = newPos;
+            onMove(newPos);
+        };
+        let end = () => {
+            this.dom.removeEventListener("touchmove", move);
+            this.dom.removeEventListener("touchend", end);
+        };
+        this.dom.addEventListener("touchmove", move);
+        this.dom.addEventListener("touchend", end);
+    }
 
 class PixelEditor {
+    /**
+     * @param {{ tool?: string; color?: string; picture: Picture; done?: any[]; doneAt?: number; }} state
+     * @param {{ tools: any; controls: any[]; dispatch: (any)=> void; }} config
+     */
     constructor(state, config) {
-        let { tools, controls, dispatch } = config;
-        this.state = state;
+            let { tools, controls, dispatch } = config;
+            this.state = state;
 
-        this.canvas = new PictureCanvas(state.picture, pos => {
-            let tool = tools[this.state.tool];
-            let onMove = tool(pos, this.state, dispatch);
-            if (onMove) return pos => onMove(pos, this.state);
-        });
+            /**
+             * @param {any} pos
+             */
+            this.canvas = new PictureCanvas(state.picture, pos => {
+                let tool = tools[this.state.tool];
+                //При взаимодействии с canvas выполняем соответствующий инструмент и смотрим, что он возвращает
+                let onMove = tool(pos, this.state, dispatch);
+                /**
+                 * @param {{x:number, y:number}} pos
+                 * Если функция-инструмент возвращает что-то(внутреннюю функцию) то выполняем ее заного
+                 */
+                if (onMove)
+                    return pos => onMove(pos, this.state);
+            });
 
-        this.controls = controls.map(Control => new Control(state, config));
-        this.dom = elt(
-            "div", {},
-            this.canvas.dom,
-            elt("br"),
-            ...this.controls.reduce((a, c) => a.concat(" ", c.dom), [])
-        );
-    }
+            /**
+             * @param {any} Control
+             */
+            // @ts-ignore
+            this.controls = controls.map(Control => new Control(state, config));
+            this.dom = elt(
+                "div", {},
+                // @ts-ignore
+                this.canvas.dom,
+                elt("br"),
+                /**
+                 * @param {{ concat: (arg0: string, arg1: any) => void; }} a
+                 * @param {{ dom: any; }} c
+                 */
+                ...this.controls.reduce((a, c) => a.concat(" ", c.dom), [])
+            );
+        }
+        /**
+         * @param {{ tool?: string; color?: string; picture: Picture; done?: any[]; doneAt?: number; }} state
+         */
     syncState(state) {
         this.state = state;
         this.canvas.syncState(state.picture);
@@ -156,6 +277,9 @@ class PixelEditor {
 }
 
 class ToolSelect {
+    /**
+     * @param {{ tool?: string; color?: string; picture: Picture; done?: any[]; doneAt?: number; }} state
+     */
     constructor(state, { tools, dispatch }) {
         this.select = elt(
             "select", {
@@ -164,38 +288,52 @@ class ToolSelect {
                         tool: this.select.value
                     })
             },
+            // @ts-ignore
             ...Object.keys(tools).map(name =>
                 elt(
-                    "option", { selected: name == state.tool }, name
-                )
-            )
+                    "option", { selected: name == state.tool }, name))
         );
         this.dom = elt("label", null, "Инструмент: ", this.select);
     }
 
+    /**
+     * @param {{ tool: any; }} state
+     */
     syncState(state) {
         this.select.value = state.tool;
     }
 }
 
 class ColorSelect {
+    /**
+     * @param {{ tool?: string; color?: string; picture: Picture; done?: any[]; doneAt?: number; }} state
+     */
     constructor(state, { dispatch }) {
-        this.input = elt("input", {
-            type: "color",
-            value: state.color,
-            onchange: () =>
-                dispatch({
-                    color: this.input.value
-                })
-        });
-        this.dom = elt("label", null, "Цвет: ", this.input);
-    }
+            this.input = elt("input", {
+                type: "color",
+                value: state.color,
+                onchange: () =>
+                    dispatch({
+                        // @ts-ignore
+                        color: this.input.value
+                    })
+            });
+            // @ts-ignore
+            this.dom = elt("label", null, "Цвет: ", this.input);
+        }
+        /**
+         * @param {{ color: any; }} state
+         */
     syncState(state) {
+        // @ts-ignore
         this.input.value = state.color;
     }
 }
 
 class ClearButton {
+    /**
+     * @param {{ picture: any; }} state
+     */
     constructor(state, { dispatch }) {
         this.picture = state.picture;
         this.dom = elt(
@@ -208,16 +346,28 @@ class ClearButton {
         );
     }
 
+    /**
+     * @param {{ picture: any; }} state
+     */
     syncState(state) {
         this.picture = state.picture;
     }
 }
 
+/**
+ * @param {{ x: number; y: number; }} pos
+ * @param {any} state
+ * @param {(arg0: { picture: any; }) => void} dispatch
+ */
 function draw(pos, state, dispatch) {
-    function drawPixel({ x, y }, state) {
+    /**
+     * @param {{ color: any; picture: { draw: (arg0: { x: any; y: any; color: any; }[]) => void; }; }} state
+     * @param {{x:number, y:number}} point
+     */
+    function drawPixel(point, state) {
         let drawn = {
-            x,
-            y,
+            x: point.x,
+            y: point.y,
             color: state.color
         };
         dispatch({
@@ -228,7 +378,15 @@ function draw(pos, state, dispatch) {
     return drawPixel;
 }
 
+/**
+ * @param {{ x: number; y: number; }} start
+ * @param {{ color: any; picture: { draw: (arg0: { x: number; y: number; color: any; }[]) => void; }; }} state
+ * @param {(arg0: { picture: any; }) => void} dispatch
+ */
 function rectangle(start, state, dispatch) {
+    /**
+     * @param {{ x: number; y: number; }} pos
+     */
     function drawRectangle(pos) {
         let xStart = Math.min(start.x, pos.x);
         let yStart = Math.min(start.y, pos.y);
@@ -254,17 +412,23 @@ function rectangle(start, state, dispatch) {
 }
 
 
-function fill({ x, y }, state, dispatch, pattern) {
-    let targetColor = state.picture.pixel(x, y);
+/**
+ * @param {{ picture: { pixel: { (arg0: number, arg1: number): string}; width: number; height: number; draw: (arg0: { x: number; y: number; color: string; }[]) => void; }; color: string; }} state
+ * @param {(arg0: { picture: any; }) => void} dispatch
+ * @param {{ color: any; }[][] | { color: any; }[][]} pattern
+ * @param {{x: number; y: number}} point
+ */
+function fill(point, state, dispatch, pattern) {
+    let targetColor = state.picture.pixel(point.x, point.y);
     let isPatternFill;
     if (pattern) {
         isPatternFill = true;
     }
 
     let drawn = [{
-        x,
-        y,
-        color: isPatternFill ? pattern[(y % pattern.length)][(x % pattern.length)].color : state.color
+        x: point.x,
+        y: point.y,
+        color: isPatternFill ? pattern[(point.y % pattern.length)][(point.x % pattern.length)].color : state.color
     }];
 
     for (let done = 0; done < drawn.length; done++) {
@@ -293,6 +457,14 @@ function fill({ x, y }, state, dispatch, pattern) {
     });
 }
 
+/**
+ * @param {{ x: number; y: number; }} pos
+ * @param {{ picture: { pixel: { (arg0: number, arg1: number): string}; 
+ * width: number; height: number; 
+ * draw: (arg0: { x: number; y: number; color: string; }[]) => void; }; 
+ * color: string; }} state
+ * @param {any} dispatch
+ */
 function fillWithPattern(pos, state, dispatch) {
 
     let targetColor = state.picture.pixel(pos.x, pos.y);
@@ -306,15 +478,28 @@ function fillWithPattern(pos, state, dispatch) {
     fill({ x: pos.x, y: pos.y }, state, dispatch, defaultFillPattern);
 }
 
+/**
+ * @param {{ x: any; y: any; }} pos
+ * @param {{ picture: { pixel: (arg0: any, arg1: any) => void; }; }} state
+ * @param {(arg0: { color: any; }) => void} dispatch
+ */
 function pick(pos, state, dispatch) {
     dispatch({
         color: state.picture.pixel(pos.x, pos.y)
     });
 }
 
+/**
+ * @param {{ x: any; y: any; }} start
+ * @param {{ color: any; picture: { draw: (arg0: { x: any; y: any; color: any; }[]) => void; }; }} state
+ * @param {(arg0: { picture: any; }) => void} dispatch
+ */
 function line(start, state, dispatch) {
 
     //На основе замыкания
+    /**
+     * @param {{ x: number; y: number; }} pos
+     */
     function drawLine(pos) {
 
         let x0 = start.x;
@@ -385,6 +570,9 @@ function line(start, state, dispatch) {
         });
     }
 
+    /**
+     * @param {number} x
+     */
     function sign(x) {
         return (x > 0) ? 1 : (x < 0) ? -1 : 0;
     }
@@ -394,8 +582,16 @@ function line(start, state, dispatch) {
     return drawLine;
 }
 
+/**
+ * @param {{ x: any; y: any; }} start
+ * @param {{ color: any; picture: { draw: (arg0: any[]) => void; }; }} state
+ * @param {(arg0: { picture: any; }) => void} dispatch
+ */
 function circle(start, state, dispatch) {
 
+    /**
+     * @param {{ x: number; y: number; }} pos
+     */
     function drawCircle(pos) {
 
         let drawn = [];
@@ -485,6 +681,9 @@ function circle(start, state, dispatch) {
 }
 
 class SaveButton {
+    /**
+     * @param {{ picture: Picture; }} state
+     */
     constructor(state) {
         this.picture = state.picture;
         this.dom = elt(
@@ -496,23 +695,29 @@ class SaveButton {
     }
 
     save() {
-        let canvas = elt("canvas");
-        drawPicture(this.picture, canvas, 1);
-        let link = elt("a", {
-            href: canvas.toDataURL(),
-            download: "pixelart.png"
-        });
-        console.log(link.href);
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-    }
+            let canvas = elt("canvas");
+            drawPicture(this.picture, canvas, 1);
+            let link = elt("a", {
+                // @ts-ignore
+                href: canvas.toDataURL(),
+                download: "pixelart.png"
+            });
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        }
+        /**
+         * @param {{ picture: any; }} state
+         */
     syncState(state) {
         this.picture = state.picture;
     }
 }
 
 class LoadButton {
+    /**
+     * @param {any} _
+     */
     constructor(_, { dispatch }) {
         this.dom = elt(
             "button", {
@@ -524,9 +729,13 @@ class LoadButton {
     syncState() {}
 }
 
+/**
+ * @param {(any) => void} dispatch
+ */
 function startLoad(dispatch) {
     let input = elt("input", {
         type: "file",
+        // @ts-ignore
         onchange: () => finishLoad(input.files[0], dispatch)
     });
     document.body.appendChild(input);
@@ -534,6 +743,10 @@ function startLoad(dispatch) {
     input.remove();
 }
 
+/**
+ * @param {*} file
+ * @param {(any) => void} dispatch
+ */
 function finishLoad(file, dispatch) {
     if (file == null) return;
     let reader = new FileReader();
@@ -546,14 +759,15 @@ function finishLoad(file, dispatch) {
             src: reader.result
         });
     });
-    console.log("URL file :");
-    console.log(file);
     reader.readAsDataURL(file);
 }
 
 const minWidth = 100;
 const maxHeight = 100;
 
+/**
+ * @param {any} image
+ */
 function pictureFromImage(image) {
     let width = Math.min(minWidth, image.width);
     let height = Math.min(maxHeight, image.height);
@@ -561,6 +775,7 @@ function pictureFromImage(image) {
         width,
         height
     });
+    // @ts-ignore
     let сx = canvas.getContext("2d");
     сx.drawImage(image, 0, 0);
     let pixels = [];
@@ -572,11 +787,18 @@ function pictureFromImage(image) {
     }
     return new Picture(width, height, pixels);
 
+    /**
+     * @param {{ toString: (arg0: number) => { padStart: (arg0: number, arg1: string) => string; }; }} n
+     */
     function hex(n) {
         return n.toString(16).padStart(2, "0");
     }
 }
 
+/**
+ * @param {*} state
+ * @param {*} action
+ */
 function historyUpdateState(state, action) {
     if (action.undo == true) {
         if (state.done.length == 0) return state;
@@ -596,14 +818,21 @@ function historyUpdateState(state, action) {
 }
 
 class UndoButton {
+    /**
+     * @param {*} state
+     */
     constructor(state, { dispatch }) {
 
-        this.dom = elt("button", {
-            onclick: () => dispatch({ undo: true }),
-            disabled: state.done.length == 0
-        }, " Отменить");
-    }
+            this.dom = elt("button", {
+                onclick: () => dispatch({ undo: true }),
+                disabled: state.done.length == 0
+            }, " Отменить");
+        }
+        /**
+         * @param {*} state
+         */
     syncState(state) {
+        // @ts-ignore
         this.dom.disabled = state.done.length == 0;
     }
 }
@@ -640,6 +869,9 @@ function startPixelEditor({
     let app = new PixelEditor(state, {
         tools,
         controls,
+        /**
+         * @param {{ tool?: string; color?: string; picture?: Picture}} action
+         */
         dispatch(action) {
             state = historyUpdateState(state, action);
             app.syncState(state);
