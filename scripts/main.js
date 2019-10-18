@@ -1,4 +1,3 @@
-//Main class
 //@ts-check
 'use strict';
 const scale = 10; //разрешение 1 пикселя
