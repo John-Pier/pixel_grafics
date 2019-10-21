@@ -1,6 +1,7 @@
 //@ts-check
 'use strict';
 const scale = 10; //разрешение 1 пикселя
+// Массив ходов для заливки
 const around = [{
         dx: -1,
         dy: 0
@@ -117,8 +118,6 @@ class PictureCanvas {
         this.picture = picture;
     }
 }
-
-
 
 PictureCanvas.prototype.mouse =
     /**
@@ -495,20 +494,22 @@ function pick(pos, state, dispatch) {
  */
 function line(start, state, dispatch) {
 
-    //На основе замыкания
     /**
      * @param {{ x: number; y: number; }} pos
      */
     function drawLine(pos) {
 
-        let x0 = start.x;
-        let y0 = start.y;
+        //Начальные точки на основе замыкания
+        let x = start.x;
+        let y = start.y;
+
         let x1 = pos.x;
         let y1 = pos.y;
+
         let drawn = [];
 
-        let dx = x1 - x0,
-            dy = y1 - y0;
+        let dx = x1 - x,
+            dy = y1 - y;
 
         let stepY = sign(dy);
         let stepX = sign(dx);
@@ -517,28 +518,22 @@ function line(start, state, dispatch) {
         if (dy < 0) dy = -dy; //поэтому  dx = |dx|; dy = |dy|
 
 
-        //определяем наклон отрезка
-        let pdX = 0,
+        //определяютя наклоном отрезка
+        //прямая лежит ниже 45 градусов
+        let pdX = stepX,
             pdY = 0,
-            es = 0,
-            m = 0;
-
-        if (dx > dy) {
-            pdX = stepX;
-            pdY = 0;
-            es = dy;
+            es = dy,
             m = dx;
-        } else {
+
+        //Если выше 45 градусов
+        if (dx <= dy) {
             pdX = 0;
             pdY = stepY;
             es = dx;
             m = dy;
         }
 
-        let x = x0;
-        let y = y0;
-
-        let e = m / 2;
+        let e = m / 2; // Такое определение предотвращает деление на 0 в случае вертикальной прямой
 
         drawn.push({
             x: x,
@@ -579,6 +574,94 @@ function line(start, state, dispatch) {
     drawLine(start);
 
     return drawLine;
+}
+
+function ellipse(start, state, dispatch) {
+
+
+    function drawEllipse(pos) {
+
+        let drawn = [];
+
+        // Симметрия относительно 2-х главных осей
+        function draw4Pixels({ x, y }) {
+            drawn.push({
+                x: x + x0,
+                y: y + y0,
+                color: state.color
+            });
+            drawn.push({
+                x: x + x0,
+                y: -y + y0,
+                color: state.color
+            });
+            drawn.push({
+                x: -x + x0,
+                y: y + y0,
+                color: state.color
+            });
+            drawn.push({
+                x: -x + x0,
+                y: -y + y0,
+                color: state.color
+            });
+        }
+
+        let stepY = -1;
+        let stepX = 1;
+
+        let x0 = start.x;
+        let y0 = start.y;
+
+        let a = Math.abs(pos.x - x0),
+            b = Math.abs(pos.y - y0);
+
+        let a2 = Math.pow(a, 2);
+        let b2 = Math.pow(b, 2);
+
+        let x = 0,
+            y = b;
+
+        let d = 4 * b2 * ((x + 1) * (x + 1)) +
+            a2 * ((2 * y - 1) * (2 * y - 1)) -
+            4 * a2 * b2; // Функция координат точки (x+1, y-1/2)
+
+        //Выше 45 градусов
+        while (a2 * (2 * y - 1) > 2 * b2 * (x + 1)) {
+            draw4Pixels({ x, y });
+            if (d < 0) {
+                x += stepX;
+                d += 4 * b2 * (2 * x + 3);
+            } else {
+                x += stepX;
+                d -= 8 * a2 * (y - 1) - 4 * b2 * (2 * x + 3);
+                y += stepY;
+            }
+        }
+
+        d = b2 * ((2 * x + 1) * (2 * x + 1)) +
+            4 * a2 * ((y + 1) * (y + 1)) -
+            4 * a2 * b2; // Функция координат точки (x+1/2, y-1)
+
+        while (y + 1 != 0) {
+            draw4Pixels({ x, y });
+            if (d < 0) {
+                y += stepY;
+                d += 4 * a2 * (2 * y + 3);
+            } else {
+                y += stepY;
+                d -= 8 * b2 * (x + 1) - 4 * a2 * (2 * y + 3);
+                x += stepX;
+            }
+        }
+
+        dispatch({
+            picture: state.picture.draw(drawn)
+        });
+    }
+    drawEllipse(start);
+
+    return drawEllipse;
 }
 
 /**
@@ -845,7 +928,7 @@ const startState = {
     doneAt: 0
 };
 
-const baseTools = { draw, line, rectangle, circle, fill, fillWithPattern, pick };
+const baseTools = { draw, line, rectangle, circle, ellipse, fill, fillWithPattern, pick };
 
 const baseControls = [
     ToolSelect, ColorSelect, SaveButton, LoadButton, UndoButton, ClearButton
