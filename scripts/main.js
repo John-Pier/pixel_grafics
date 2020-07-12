@@ -572,15 +572,124 @@ function line(start, state, dispatch) {
     }
 
     drawLine(start);
-
     return drawLine;
+}
+
+function drawLine(start, pos, state, dispatch) {
+
+    //Начальные точки на основе замыкания
+    let x = start.x;
+    let y = start.y;
+
+    let x1 = pos.x;
+    let y1 = pos.y;
+
+    let drawn = [];
+
+    let dx = x1 - x,
+        dy = y1 - y;
+
+    let stepY = sign(dy);
+    let stepX = sign(dx);
+
+    if (dx < 0) dx = -dx; //равносильно Math.abs(dy) > Math.abs(dx); =>
+    if (dy < 0) dy = -dy; //поэтому  dx = |dx|; dy = |dy|
+
+
+    //определяютя наклоном отрезка
+    //прямая лежит ниже 45 градусов
+    let pdX = stepX,
+        pdY = 0,
+        es = dy,
+        m = dx;
+
+    //Если выше 45 градусов
+    if (dx <= dy) {
+        pdX = 0;
+        pdY = stepY;
+        es = dx;
+        m = dy;
+    }
+
+    let e = m / 2; // Такое определение предотвращает деление на 0 в случае вертикальной прямой
+
+    drawn.push({
+        x: x,
+        y: y,
+        color: state.color
+    });
+
+    for (let i = 0; i < m; i++) {
+        e -= es;
+        if (e < 0) {
+            e += m;
+            x += stepX
+            y += stepY;
+        } else {
+            x += pdX;
+            y += pdY;
+        }
+
+        drawn.push({
+            x,
+            y,
+            color: state.color
+        });
+    }
+
+    dispatch({
+        picture: state.picture.draw(drawn)
+    });
+}
+
+/**
+ * @param {number} x
+ */
+function sign(x) {
+    return (x > 0) ? 1 : (x < 0) ? -1 : 0;
+}
+
+function ellipseParams(start, state, dispatch) {
+    // drawLine(start, start, state, dispatch);
+    function drawEllipse(pos) {
+        let drawn = [];
+
+        let x0 = start.x;
+        let y0 = start.y;
+
+        let a = Math.abs(pos.x - x0),
+            b = Math.abs(pos.y - y0);
+
+        let x1 = x0 + a;
+        let y1 = y0
+        let x2, y2;
+
+        for (let i = 1; i <= 360; i++) {
+            // let drawLine = line({ x: x1, y: y1 }, state, dispatch);
+            x2 = Math.round(x0 + a * Math.cos(i * Math.PI / 180));
+            y2 = Math.round(y0 + b * Math.sin(i * Math.PI / 180));
+            // drawLine({ x: x1, y: y1 }, { x: x2, y: y2 }, state, dispatch);
+            drawn.push({
+                x: x2,
+                y: y2,
+                color: state.color
+            });
+            /*  */
+            x1 = x2;
+            y1 = y2;
+        }
+        dispatch({
+            picture: state.picture.draw(drawn)
+        });
+    }
+
+    drawEllipse(start);
+    return drawEllipse;
 }
 
 function ellipse(start, state, dispatch) {
 
-
     function drawEllipse(pos) {
-
         let drawn = [];
 
         // Симметрия относительно 2-х главных осей
@@ -622,11 +731,11 @@ function ellipse(start, state, dispatch) {
         let x = 0,
             y = b;
 
-        let d = 4 * b2 * ((x + 1) * (x + 1)) +
-            a2 * ((2 * y - 1) * (2 * y - 1)) -
+        let d = 4 * b2 * Math.pow((x + 1), 2) +
+            a2 * (Math.pow(2 * y - 1, 2)) -
             4 * a2 * b2; // Функция координат точки (x+1, y-1/2)
 
-        //Выше 45 градусов
+        //x растет быстрее
         while (a2 * (2 * y - 1) > 2 * b2 * (x + 1)) {
             draw4Pixels({ x, y });
             if (d < 0) {
@@ -639,8 +748,8 @@ function ellipse(start, state, dispatch) {
             }
         }
 
-        d = b2 * ((2 * x + 1) * (2 * x + 1)) +
-            4 * a2 * ((y + 1) * (y + 1)) -
+        d = b2 * Math.pow((2 * x + 1), 2) +
+            4 * a2 * Math.pow((y + 1), 2) -
             4 * a2 * b2; // Функция координат точки (x+1/2, y-1)
 
         while (y + 1 != 0) {
@@ -928,7 +1037,7 @@ const startState = {
     doneAt: 0
 };
 
-const baseTools = { draw, line, rectangle, circle, ellipse, fill, fillWithPattern, pick };
+const baseTools = { draw, line, rectangle, circle, ellipse, ellipseParams, fill, fillWithPattern, pick };
 
 const baseControls = [
     ToolSelect, ColorSelect, SaveButton, LoadButton, UndoButton, ClearButton
